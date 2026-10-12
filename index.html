@@ -206,6 +206,13 @@ input[type=search] { width: 100%; border: 0; background: var(--surface-2); color
 .acc .sync { margin-top: 8px; color: var(--muted); font-size: 12px; }
 .acc .coins > .sync { margin: 6px 0 4px; font-weight: 600; }
 .acc .coins > .link { border: 0; background: none; padding: 10px 0 0; font: inherit; font-size: 14px; }
+.gifts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+.gift { display: block; background: var(--surface-2); border-radius: 16px; padding: 8px 8px 10px; color: inherit; text-decoration: none; min-width: 0; }
+.gift .pic { aspect-ratio: 1; border-radius: 12px; overflow: hidden; background: var(--grid); margin-bottom: 8px; }
+.gift .pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gift .gt { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gift .gm { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gift .gp { font-weight: 700; font-size: 15px; margin-top: 4px; }
 /* capital */
 .hold { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; padding: 8px 0 8px 20px; font-size: 14px;
   border-bottom: 1px solid var(--grid); align-items: center; }
@@ -1676,12 +1683,29 @@ function moveRow(m, cur) {
   if (m[2] != null) right.append(el("div", "a num" + (m[2] > 0 ? " in" : ""), (m[2] > 0 ? "+" : m[2] < 0 ? "−" : "") + fmtNative(Math.abs(m[2]), cur)));
   r.append(left, right); return r;
 }
+function giftGrid(C, hs) {
+  const grid = el("div", "gifts");
+  hs.sort((x, y) => y[2] - x[2]).forEach(h => {
+    const slug = h[0].slice(5), g = (C.gifts || {})[slug] || [slug.replace(/-\d+$/, ""), slug.split("-").pop()];
+    const t = el("a", "gift"); t.href = "https://t.me/nft/" + slug; t.target = "_blank"; t.rel = "noopener";
+    const img = el("img"); img.alt = ""; img.loading = "lazy"; img.src = `https://nft.fragment.com/gift/${slug.toLowerCase()}.medium.jpg`;
+    img.onerror = () => img.remove();
+    const pic = el("div", "pic"); pic.append(img);
+    t.append(pic, el("div", "gt", `${g[0]} #${g[1]}`));
+    if (g[2]) t.append(el("div", "gm", g[2] + (g[5] ? ` · ${String(g[5]).replace(".", ",")}%` : "")));
+    t.append(el("div", "gp num", (g[6] ? `от ${String(+g[6].toFixed(2)).replace(".", ",")} TON` : "нет цены")));
+    if (g[6]) t.append(el("div", "gm", "≈ " + fmt(h[2]) + " " + state.cur + (g[7] === "коллекция" ? " · флор коллекции" : "")));
+    grid.append(t);
+  });
+  return grid;
+}
 function accCard(C, p, sum) {
   const card = el("article", "card acc"); card.dataset.acc = p.i;
   const a = p.i >= 0 ? C.acc[p.i] : null, kind = a ? a[1] : "Кошелёк";
   const head = el("div", "acc-head");
   head.append(logo(p.label, kind, p.color), el("div", "nm", p.label));
-  const kd = a ? [KIND_LONG[kind] || KIND[kind] || kind] : ["Деньги на картах и наличные"];
+  const isGifts = a && C.hold.some(h => h[4] === p.i && h[0].startsWith("GIFT:"));
+  const kd = a ? [isGifts ? "Коллекционные подарки · цены Portals" : KIND_LONG[kind] || KIND[kind] || kind] : ["Деньги на картах и наличные"];
   if (a && a[7]) kd.push(String(a[7]).replace(".", ",") + "% годовых");
   if (a && a[4] !== state.cur && a[4]) kd.push("в " + a[4]);
   if (live() && C.ids && a) { const m = el("button", "more"); m.setAttribute("aria-label", "Действия со счётом"); m.append(icon("ellipsis", 20));
@@ -1707,8 +1731,10 @@ function accCard(C, p, sum) {
     card.append(facts);
   }
   const hs = a ? C.hold.filter(h => h[4] === p.i) : [];
-  if (hs.length) { const box = el("div", "coins");
-    hs.forEach(h => { const r = el("div", "coin"), pnl = h[2] - h[3], left = el("div");
+  const gh = hs.filter(h => h[0].startsWith("GIFT:"));
+  if (gh.length) card.append(giftGrid(C, gh));
+  if (hs.length > gh.length) { const box = el("div", "coins");
+    hs.filter(h => !h[0].startsWith("GIFT:")).forEach(h => { const r = el("div", "coin"), pnl = h[2] - h[3], left = el("div");
       left.append(el("div", null, h[0]), el("div", "q", `${h[1]} × ${h[5]} ${h[6] || ""}`));
       const right = el("div"); right.append(el("div", "a num", fmt(h[2]) + " " + state.cur));
       if (h[3]) right.append(el("div", "p " + (pnl >= 0 ? "good" : "bad"), (pnl >= 0 ? "+" : "−") + Math.abs(pnl * 100 / h[3]).toFixed(1).replace(".", ",") + "%"));
