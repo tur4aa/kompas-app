@@ -218,6 +218,8 @@ input[type=search] { width: 100%; border: 0; background: var(--surface-2); color
 .gtags span { font-size: 11px; font-weight: 600; padding: 3px 7px; border-radius: 999px; background: var(--surface); color: var(--ink-2); }
 .gtags span.ask { background: var(--accent); color: #fff; }
 .gift-big { width: 100%; max-width: 280px; aspect-ratio: 1; border-radius: 18px; display: block; margin: 4px auto 12px; object-fit: cover; }
+.skin .pic { background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--rar, #888) 22%, var(--surface)), var(--surface-2)); border-bottom: 3px solid var(--rar, transparent); }
+.skin .pic img { object-fit: contain; padding: 8px; }
 /* capital */
 .hold { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; padding: 8px 0 8px 20px; font-size: 14px;
   border-bottom: 1px solid var(--grid); align-items: center; }
@@ -1662,7 +1664,7 @@ function renderCapital() {
     $("c-donut").replaceChildren(); $("c-legend").replaceChildren(); $("c-acc").replaceChildren();
     $("c-note").textContent = "Капитал пока пуст. Пришлите боту выписку по вкладу или напишите: «закинул 50к тенге на брокерский, вышло 110$»."; return; }
   const wallet = C.wallet.reduce((a, w) => a + w[2], 0), accSum = C.acc.reduce((a, x) => a + x[2], 0);
-  const giftAcc = new Set(C.hold.filter(h => h[0].startsWith("GIFT:")).map(h => h[4]));
+  const giftAcc = new Set(C.hold.filter(h => /^(GIFT|SKIN):/.test(h[0])).map(h => h[4]));
   const total = wallet + accSum, invested = C.acc.reduce((a, x, i) => a + (giftAcc.has(i) ? 0 : x[3]), 0);
   const tracked = C.acc.reduce((a, x, i) => a + (giftAcc.has(i) ? 0 : x[2]), 0);
   $("c-total").replaceChildren(document.createTextNode(fmt(total, null, { whole: total > 100000 })), el("small", null, state.cur));
@@ -1710,6 +1712,30 @@ function giftSheet(slug, g, h) {
     if (g[8] || g[9]) sh.append(button("Убрать пометки", "ghost", () => send("POST", "api/gift", { slug, ask: "", mine: "" })));
   });
 }
+function skinTile(C, h) {
+  const name = h[0].slice(5), m = (C.skins || {})[name] || [];
+  const t = el("a", "gift skin"); t.href = "https://steamcommunity.com/market/listings/730/" + encodeURIComponent(name);
+  t.target = "_blank"; t.rel = "noopener";
+  if (m[3]) t.style.setProperty("--rar", "#" + m[3]);
+  const pic = el("div", "pic");
+  if (m[0]) { const img = el("img"); img.alt = ""; img.loading = "lazy"; img.src = `https://community.cloudflare.steamstatic.com/economy/image/${m[0]}/256fx256f`;
+    img.onerror = () => img.remove(); pic.append(img); }
+  const parts = name.replace(/ \((Factory New|Minimal Wear|Field-Tested|Well-Worn|Battle-Scarred)\)$/, "").split(" | ");
+  const qty = +h[1] > 1 ? ` ×${h[1]}` : "";
+  t.append(pic, el("div", "gt", (parts[1] || parts[0]) + qty), el("div", "gm", [parts[1] ? parts[0] : "", m[4]].filter(Boolean).join(" · ")),
+    el("div", "gp num", fmt(h[2]) + " " + state.cur));
+  return t;
+}
+function skinGrid(C, hs, title) {
+  const box = el("div"), grid = el("div", "gifts"), sorted = hs.slice().sort((x, y) => y[2] - x[2]);
+  sorted.slice(0, 6).forEach(h => grid.append(skinTile(C, h)));
+  box.append(grid);
+  if (sorted.length > 6) { const all = el("button", "link", `Все скины · ${sorted.length}`);
+    all.style.cssText = "border:0;background:none;padding:12px 0 0;font:inherit;font-size:14px";
+    all.onclick = () => { haptic(); openSheet(title, sh => { const g = el("div", "gifts"); sorted.forEach(h => g.append(skinTile(C, h))); sh.append(g); }); };
+    box.append(all); }
+  return box;
+}
 function giftGrid(C, hs) {
   const grid = el("div", "gifts");
   hs.sort((x, y) => y[2] - x[2]).forEach(h => {
@@ -1735,10 +1761,11 @@ function accCard(C, p, sum) {
   const a = p.i >= 0 ? C.acc[p.i] : null, kind = a ? a[1] : "Кошелёк";
   const head = el("div", "acc-head");
   const isGifts = a && C.hold.some(h => h[4] === p.i && h[0].startsWith("GIFT:"));
-  head.append(logo(p.label, isGifts ? "gift" : kind, p.color), el("div", "nm", p.label));
-  const kd = a ? [isGifts ? "Коллекционные подарки · цены Portals" : KIND_LONG[kind] || KIND[kind] || kind] : ["Деньги на картах и наличные"];
+  const isSkins = a && C.hold.some(h => h[4] === p.i && h[0].startsWith("SKIN:"));
+  head.append(logo(p.label, isGifts ? "gift" : isSkins ? "gamepad-2" : kind, p.color), el("div", "nm", p.label));
+  const kd = a ? [isGifts ? "Коллекционные подарки · цены Portals" : isSkins ? "Инвентарь Steam · цены market.csgo.com" : KIND_LONG[kind] || KIND[kind] || kind] : ["Деньги на картах и наличные"];
   if (a && a[7]) kd.push(String(a[7]).replace(".", ",") + "% годовых");
-  if (a && !isGifts && a[4] !== state.cur && a[4]) kd.push("в " + a[4]);
+  if (a && !isGifts && !isSkins && a[4] !== state.cur && a[4]) kd.push("в " + a[4]);
   if (live() && C.ids && a) { const m = el("button", "more"); m.setAttribute("aria-label", "Действия со счётом"); m.append(icon("ellipsis", 20));
     m.onclick = () => { haptic(); confirmSheet(`Удалить счёт «${p.label}» и всю его историю?`, "Удалить", () => send("DELETE", `api/account/${C.ids[p.i]}`)); };
     head.append(m); }
@@ -1763,6 +1790,8 @@ function accCard(C, p, sum) {
       if (ask.length) f("Хочу продать", tonFmt(ask.reduce((x, g) => x + g[8], 0)), `${ask.length} из ${gs.length} подарков`);
       card.append(facts);
     }
+  } else if (isSkins) {
+    // no invested/result: skins were bought long ago, their cost is unknown
   } else if (a && kind !== "asset" && a[3]) {
     const pnl = p.value - p.inv, cur = a[4], nat = a.length > 8 && a[8] != null;
     const facts = el("div", "acc-facts");
@@ -1776,10 +1805,11 @@ function accCard(C, p, sum) {
     card.append(facts);
   }
   const hs = a ? C.hold.filter(h => h[4] === p.i) : [];
-  const gh = hs.filter(h => h[0].startsWith("GIFT:"));
+  const gh = hs.filter(h => h[0].startsWith("GIFT:")), sh = hs.filter(h => h[0].startsWith("SKIN:"));
   if (gh.length) card.append(giftGrid(C, gh));
-  if (hs.length > gh.length) { const box = el("div", "coins");
-    hs.filter(h => !h[0].startsWith("GIFT:")).forEach(h => { const r = el("div", "coin"), pnl = h[2] - h[3], left = el("div");
+  if (sh.length) card.append(skinGrid(C, sh, p.label));
+  if (hs.length > gh.length + sh.length) { const box = el("div", "coins");
+    hs.filter(h => !/^(GIFT|SKIN):/.test(h[0])).forEach(h => { const r = el("div", "coin"), pnl = h[2] - h[3], left = el("div");
       left.append(el("div", null, h[0]), el("div", "q", `${h[1]} × ${h[5]} ${h[6] || ""}`));
       const right = el("div"); right.append(el("div", "a num", fmt(h[2]) + " " + state.cur));
       if (h[3]) right.append(el("div", "p " + (pnl >= 0 ? "good" : "bad"), (pnl >= 0 ? "+" : "−") + Math.abs(pnl * 100 / h[3]).toFixed(1).replace(".", ",") + "%"));
