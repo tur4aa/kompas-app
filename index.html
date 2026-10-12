@@ -208,7 +208,7 @@ input[type=search] { width: 100%; border: 0; background: var(--surface-2); color
 .acc .coins > .link { border: 0; background: none; padding: 10px 0 0; font: inherit; font-size: 14px; }
 .gifts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
 .gift { display: block; background: var(--surface-2); border-radius: 16px; padding: 8px 8px 10px; color: inherit; text-decoration: none; min-width: 0; }
-.gift .pic { aspect-ratio: 1; border-radius: 12px; overflow: hidden; background: var(--grid); margin-bottom: 8px; }
+.gift .pic { aspect-ratio: 1; border-radius: 14px; overflow: hidden; background: var(--grid); margin-bottom: 9px; }
 .gift .pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .gift .gt { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gift .gm { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1683,6 +1683,7 @@ function moveRow(m, cur) {
   if (m[2] != null) right.append(el("div", "a num" + (m[2] > 0 ? " in" : ""), (m[2] > 0 ? "+" : m[2] < 0 ? "−" : "") + fmtNative(Math.abs(m[2]), cur)));
   r.append(left, right); return r;
 }
+const tonFmt2 = v => (Math.round(v * 100) / 100).toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + " TON";
 function giftGrid(C, hs) {
   const grid = el("div", "gifts");
   hs.sort((x, y) => y[2] - x[2]).forEach(h => {
@@ -1691,10 +1692,10 @@ function giftGrid(C, hs) {
     const img = el("img"); img.alt = ""; img.loading = "lazy"; img.src = `https://nft.fragment.com/gift/${slug.toLowerCase()}.medium.jpg`;
     img.onerror = () => img.remove();
     const pic = el("div", "pic"); pic.append(img);
-    t.append(pic, el("div", "gt", `${g[0]} #${g[1]}`));
-    if (g[2]) t.append(el("div", "gm", g[2] + (g[5] ? ` · ${String(g[5]).replace(".", ",")}%` : "")));
-    t.append(el("div", "gp num", (g[6] ? `от ${String(+g[6].toFixed(2)).replace(".", ",")} TON` : "нет цены")));
-    if (g[6]) t.append(el("div", "gm", "≈ " + fmt(h[2]) + " " + state.cur + (g[7] === "коллекция" ? " · флор коллекции" : "")));
+    t.append(pic, el("div", "gt", g[0]));
+    t.append(el("div", "gm", `#${g[1]}` + (g[2] ? ` · ${g[2]}` : "") + (g[5] ? ` · ${String(g[5]).replace(".", ",")}%` : "")));
+    t.append(el("div", "gp num", g[6] ? tonFmt2(g[6]) : "нет цены"));
+    if (g[6]) t.append(el("div", "gm", "≈ " + fmt(h[2]) + " " + state.cur + (g[7] === "коллекция" ? " · по коллекции" : "")));
     grid.append(t);
   });
   return grid;
@@ -1703,22 +1704,34 @@ function accCard(C, p, sum) {
   const card = el("article", "card acc"); card.dataset.acc = p.i;
   const a = p.i >= 0 ? C.acc[p.i] : null, kind = a ? a[1] : "Кошелёк";
   const head = el("div", "acc-head");
-  head.append(logo(p.label, kind, p.color), el("div", "nm", p.label));
   const isGifts = a && C.hold.some(h => h[4] === p.i && h[0].startsWith("GIFT:"));
+  head.append(logo(p.label, isGifts ? "gift" : kind, p.color), el("div", "nm", p.label));
   const kd = a ? [isGifts ? "Коллекционные подарки · цены Portals" : KIND_LONG[kind] || KIND[kind] || kind] : ["Деньги на картах и наличные"];
   if (a && a[7]) kd.push(String(a[7]).replace(".", ",") + "% годовых");
-  if (a && a[4] !== state.cur && a[4]) kd.push("в " + a[4]);
+  if (a && !isGifts && a[4] !== state.cur && a[4]) kd.push("в " + a[4]);
   if (live() && C.ids && a) { const m = el("button", "more"); m.setAttribute("aria-label", "Действия со счётом"); m.append(icon("ellipsis", 20));
     m.onclick = () => { haptic(); confirmSheet(`Удалить счёт «${p.label}» и всю его историю?`, "Удалить", () => send("DELETE", `api/account/${C.ids[p.i]}`)); };
     head.append(m); }
   head.append(el("div", "kd", kd.join(" · ")));
   card.append(head);
   const val = el("div", "acc-val num");
-  if (a && a[4] !== state.cur) { val.append(el("b", null, fmtNative(a[5], a[4])), el("span", null, "≈ " + fmt(p.value, null, { whole: p.value > 100000 }) + " " + state.cur)); }
+  const tonOf = h => { const g = (C.gifts || {})[h[0].slice(5)]; return g && g[6] ? g[6] : 0; };
+  const giftTon = isGifts ? C.hold.filter(h => h[4] === p.i && h[0].startsWith("GIFT:")).reduce((x, h) => x + tonOf(h), 0) : 0;
+  const tonFmt = v => (Math.round(v * 100) / 100).toLocaleString("ru-RU", { maximumFractionDigits: 2 }).replace(",", ",") + " TON";
+  if (isGifts && giftTon) { val.append(el("b", null, tonFmt(giftTon)), el("span", null, "≈ " + fmt(p.value, null, { whole: p.value > 100000 }) + " " + state.cur)); }
+  else if (a && a[4] !== state.cur) { val.append(el("b", null, fmtNative(a[5], a[4])), el("span", null, "≈ " + fmt(p.value, null, { whole: p.value > 100000 }) + " " + state.cur)); }
   else val.append(el("b", null, fmt(p.value, null, { whole: p.value > 100000 }) + " " + state.cur));
   if (!a) val.append(el("span", null, p.sub));
   card.append(val);
-  if (a && kind !== "asset" && a[3]) {
+  if (isGifts && giftTon && p.value > 0) {
+    const perUsd = giftTon / p.value, pnl = p.value - p.inv, facts = el("div", "acc-facts");
+    const f = (k, v, cls, note) => { const d = el("div"); d.append(el("div", "k", k), el("div", "v num" + (cls ? " " + cls : ""), v));
+      if (note) d.append(el("div", "k", note)); facts.append(d); };
+    f("Подарков", String(C.hold.filter(h => h[4] === p.i && h[0].startsWith("GIFT:")).length), "", "уникальных NFT");
+    f("Результат", (pnl >= 0 ? "+" : "−") + tonFmt(Math.abs(pnl * perUsd)), Math.abs(pnl) < 1 ? "" : pnl > 0 ? "good" : "bad",
+      p.inv ? `${pnl >= 0 ? "+" : "−"}${(Math.abs(pnl) * 100 / p.inv).toFixed(1).replace(".", ",")}% с момента учёта` : null);
+    card.append(facts);
+  } else if (a && kind !== "asset" && a[3]) {
     const pnl = p.value - p.inv, cur = a[4], nat = a.length > 8 && a[8] != null;
     const facts = el("div", "acc-facts");
     const f = (k, v, cls, note) => { const d = el("div"); d.append(el("div", "k", k), el("div", "v num" + (cls ? " " + cls : ""), v));
