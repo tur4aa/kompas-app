@@ -200,9 +200,12 @@ input[type=search] { width: 100%; border: 0; background: var(--surface-2); color
 .acc .coin { display: grid; grid-template-columns: 1fr auto; gap: 0 10px; padding: 9px 0; border-top: 1px solid var(--grid); font-size: 14px; }
 .acc .coin .q { color: var(--muted); font-size: 12px; }
 .acc .coin .a { text-align: right; font-weight: 600; } .acc .coin .p { text-align: right; font-size: 12px; }
+.acc .coin .a.in { color: var(--good); }
 .acc .coin .p.good { color: var(--good); } .acc .coin .p.bad { color: var(--bad); }
 .acc .share { display: flex; align-items: center; gap: 10px; margin-top: 12px; color: var(--muted); font-size: 12px; }
 .acc .sync { margin-top: 8px; color: var(--muted); font-size: 12px; }
+.acc .coins > .sync { margin: 6px 0 4px; font-weight: 600; }
+.acc .coins > .link { border: 0; background: none; padding: 10px 0 0; font: inherit; font-size: 14px; }
 /* capital */
 .hold { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; padding: 8px 0 8px 20px; font-size: 14px;
   border-bottom: 1px solid var(--grid); align-items: center; }
@@ -1667,6 +1670,12 @@ function renderCapital() {
   renderLine(C.hist.map(h => [h[0], h[1]]).concat([[0, total]]));
   $("c-note").textContent = "Оценка по последним известным ценам и курсам. Стоимость капитала бот сохраняет раз в день.";
 }
+function moveRow(m, cur) {
+  const r = el("div", "coin"), left = el("div"), right = el("div");
+  left.append(el("div", null, m[1]), el("div", "q", shortDate(dayOf(m[0])) + (m[3] ? " · " + m[3] : "")));
+  if (m[2] != null) right.append(el("div", "a num" + (m[2] > 0 ? " in" : ""), (m[2] > 0 ? "+" : m[2] < 0 ? "−" : "") + fmtNative(Math.abs(m[2]), cur)));
+  r.append(left, right); return r;
+}
 function accCard(C, p, sum) {
   const card = el("article", "card acc"); card.dataset.acc = p.i;
   const a = p.i >= 0 ? C.acc[p.i] : null, kind = a ? a[1] : "Кошелёк";
@@ -1706,6 +1715,15 @@ function accCard(C, p, sum) {
       r.append(left, right); box.append(r); });
     card.append(box); }
   if (a && a[9]) card.append(el("div", "sync", "Кошелёк " + a[9] + " · сверяется с блокчейном раз в час"));
+  const mv = a && C.moves ? C.moves[p.i] || [] : [];
+  if (mv.length) { const box = el("div", "coins");
+    box.append(el("div", "sync", "Последние операции"));
+    mv.slice(0, 3).forEach(m => box.append(moveRow(m, a[4])));
+    if (mv.length > 3) { const all = el("button", "link", `Вся история · ${mv.length}`);
+      all.onclick = () => { haptic(); openSheet(p.label, sh => { sh.append(el("div", "lead", "История операций по счёту"));
+        const list = el("div", "acc"); mv.forEach(m => list.append(moveRow(m, a[4]))); sh.append(list); }); };
+      box.append(all); }
+    card.append(box); }
   const share = el("div", "share"), tr = el("div", "track"), bar = el("i"), pct = Math.round(Math.max(p.value, 0) * 100 / sum);
   bar.style.width = pct + "%"; bar.style.background = p.color; tr.append(bar);
   share.append(el("span", null, `доля в капитале ${pct}%`), tr);
