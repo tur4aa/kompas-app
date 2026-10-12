@@ -206,13 +206,18 @@ input[type=search] { width: 100%; border: 0; background: var(--surface-2); color
 .acc .sync { margin-top: 8px; color: var(--muted); font-size: 12px; }
 .acc .coins > .sync { margin: 6px 0 4px; font-weight: 600; }
 .acc .coins > .link { border: 0; background: none; padding: 10px 0 0; font: inherit; font-size: 14px; }
-.gifts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+.gifts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; align-items: start; }
 .gift { display: block; background: var(--surface-2); border-radius: 16px; padding: 8px 8px 10px; color: inherit; text-decoration: none; min-width: 0; }
 .gift .pic { aspect-ratio: 1; border-radius: 14px; overflow: hidden; background: var(--grid); margin-bottom: 9px; }
 .gift .pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .gift .gt { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gift .gm { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gift .gp { font-weight: 700; font-size: 15px; margin-top: 4px; }
+.gift { border: 0; text-align: left; font: inherit; width: 100%; }
+.gtags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.gtags span { font-size: 11px; font-weight: 600; padding: 3px 7px; border-radius: 999px; background: var(--surface); color: var(--ink-2); }
+.gtags span.ask { background: var(--accent); color: #fff; }
+.gift-big { width: 100%; max-width: 280px; aspect-ratio: 1; border-radius: 18px; display: block; margin: 4px auto 12px; object-fit: cover; }
 /* capital */
 .hold { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; padding: 8px 0 8px 20px; font-size: 14px;
   border-bottom: 1px solid var(--grid); align-items: center; }
@@ -1657,7 +1662,9 @@ function renderCapital() {
     $("c-donut").replaceChildren(); $("c-legend").replaceChildren(); $("c-acc").replaceChildren();
     $("c-note").textContent = "Капитал пока пуст. Пришлите боту выписку по вкладу или напишите: «закинул 50к тенге на брокерский, вышло 110$»."; return; }
   const wallet = C.wallet.reduce((a, w) => a + w[2], 0), accSum = C.acc.reduce((a, x) => a + x[2], 0);
-  const total = wallet + accSum, invested = C.acc.reduce((a, x) => a + x[3], 0);
+  const giftAcc = new Set(C.hold.filter(h => h[0].startsWith("GIFT:")).map(h => h[4]));
+  const total = wallet + accSum, invested = C.acc.reduce((a, x, i) => a + (giftAcc.has(i) ? 0 : x[3]), 0);
+  const tracked = C.acc.reduce((a, x, i) => a + (giftAcc.has(i) ? 0 : x[2]), 0);
   $("c-total").replaceChildren(document.createTextNode(fmt(total, null, { whole: total > 100000 })), el("small", null, state.cur));
   const dl = $("c-delta"); dl.replaceChildren();
   const past = C.hist.filter(h => h[0] <= -30).pop() || C.hist[0];
@@ -1665,7 +1672,7 @@ function renderCapital() {
     dl.append(el("span", "pill " + (pct >= 0 ? "good" : "bad"), (pct >= 0 ? "▲ " : "▼ ") + Math.abs(pct).toFixed(1) + "%"),
               el("span", null, `${fmt(total - past[1], null, { sign: true, whole: true })} за ${-past[0]} дн.`)); }
   const k = (l, v) => { const d = el("div", "stat"); d.append(el("div", "k", l), el("div", "v num", v)); d.querySelector(".k").style.setProperty("--x", 0); kp.append(d); };
-  k("Вложено", fmt(invested, null, { whole: true })); k("Результат", fmt(accSum - invested, null, { sign: true, whole: true })); k("Наличные", fmt(wallet, null, { whole: true }));
+  k("Вложено", fmt(invested, null, { whole: true })); k("Результат", fmt(tracked - invested, null, { sign: true, whole: true })); k("Наличные", fmt(wallet, null, { whole: true }));
   kp.querySelectorAll(".k").forEach(n => n.classList.add("plain"));
   const parts = C.acc.map((a, i) => ({ i, label: a[0], sub: KIND[a[1]] || a[1], value: a[2], inv: a[3], native: [a[5], a[4]], color: accColor(a[6]), rate: a[7] }));
   if (wallet > 0) parts.push({ i: -1, label: "Кошелёк", sub: C.wallet.map(w => fmtNative(w[1], w[0])).join(" · "), value: wallet, color: accColor(C.walletColor) });
@@ -1684,11 +1691,30 @@ function moveRow(m, cur) {
   r.append(left, right); return r;
 }
 const tonFmt2 = v => (Math.round(v * 100) / 100).toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + " TON";
+function giftSheet(slug, g, h) {
+  openSheet(`${g[0]} #${g[1]}`, sh => {
+    const img = el("img", "gift-big"); img.alt = ""; img.src = `https://nft.fragment.com/gift/${slug.toLowerCase()}.large.jpg`; img.onerror = () => img.remove();
+    sh.append(img);
+    const info = [g[2] && `Модель ${g[2]}${g[5] ? " · " + String(g[5]).replace(".", ",") + "%" : ""}`, g[3] && `Фон ${g[3]}`, g[4] && `Узор ${g[4]}`].filter(Boolean);
+    sh.append(el("div", "lead", info.join(" · ")));
+    if (g[6]) sh.append(el("div", "label", `Рынок (Portals): от ${tonFmt2(g[6])} по ${g[7] === "коллекция" ? "коллекции" : "модели"} ≈ ${fmt(h[2])} ${state.cur}`));
+    const link = el("a", "link", "Открыть в Telegram"); link.href = "https://t.me/nft/" + slug; link.target = "_blank"; link.rel = "noopener";
+    link.onclick = ev => { try { if (TG && TG.openTelegramLink) { ev.preventDefault(); TG.openTelegramLink(link.href); } } catch (e) {} };
+    sh.append(link);
+    if (!live()) return;
+    const ask = input({ inputMode: "decimal", value: g[8] ? String(g[8]).replace(".", ",") : "", placeholder: "например, 60" });
+    const mine = input({ inputMode: "decimal", value: g[9] ? String(g[9]).replace(".", ",") : "", placeholder: g[6] ? String(+g[6].toFixed(2)).replace(".", ",") : "" });
+    const two = el("div", "two"); two.append(field("Продал бы за, TON", ask), field("Моя оценка, TON", mine));
+    sh.append(el("h2", null, "Мои пометки"), two);
+    sh.append(button("Сохранить", "", () => send("POST", "api/gift", { slug, ask: ask.value.trim(), mine: mine.value.trim() })));
+    if (g[8] || g[9]) sh.append(button("Убрать пометки", "ghost", () => send("POST", "api/gift", { slug, ask: "", mine: "" })));
+  });
+}
 function giftGrid(C, hs) {
   const grid = el("div", "gifts");
   hs.sort((x, y) => y[2] - x[2]).forEach(h => {
     const slug = h[0].slice(5), g = (C.gifts || {})[slug] || [slug.replace(/-\d+$/, ""), slug.split("-").pop()];
-    const t = el("a", "gift"); t.href = "https://t.me/nft/" + slug; t.target = "_blank"; t.rel = "noopener";
+    const t = el("button", "gift"); t.onclick = () => { haptic(); giftSheet(slug, g, h); };
     const img = el("img"); img.alt = ""; img.loading = "lazy"; img.src = `https://nft.fragment.com/gift/${slug.toLowerCase()}.medium.jpg`;
     img.onerror = () => img.remove();
     const pic = el("div", "pic"); pic.append(img);
@@ -1696,6 +1722,10 @@ function giftGrid(C, hs) {
     t.append(el("div", "gm", `#${g[1]}` + (g[2] ? ` · ${g[2]}` : "") + (g[5] ? ` · ${String(g[5]).replace(".", ",")}%` : "")));
     t.append(el("div", "gp num", g[6] ? tonFmt2(g[6]) : "нет цены"));
     if (g[6]) t.append(el("div", "gm", "≈ " + fmt(h[2]) + " " + state.cur + (g[7] === "коллекция" ? " · по коллекции" : "")));
+    if (g[8] || g[9]) { const tags = el("div", "gtags");
+      if (g[8]) tags.append(el("span", "ask", "продаю " + tonFmt2(g[8])));
+      if (g[9]) tags.append(el("span", null, "моя " + tonFmt2(g[9])));
+      t.append(tags); }
     grid.append(t);
   });
   return grid;
@@ -1723,14 +1753,16 @@ function accCard(C, p, sum) {
   else val.append(el("b", null, fmt(p.value, null, { whole: p.value > 100000 }) + " " + state.cur));
   if (!a) val.append(el("span", null, p.sub));
   card.append(val);
-  if (isGifts && giftTon && p.value > 0) {
-    const perUsd = giftTon / p.value, pnl = p.value - p.inv, facts = el("div", "acc-facts");
-    const f = (k, v, cls, note) => { const d = el("div"); d.append(el("div", "k", k), el("div", "v num" + (cls ? " " + cls : ""), v));
-      if (note) d.append(el("div", "k", note)); facts.append(d); };
-    f("Подарков", String(C.hold.filter(h => h[4] === p.i && h[0].startsWith("GIFT:")).length), "", "уникальных NFT");
-    f("Результат", (pnl >= 0 ? "+" : "−") + tonFmt(Math.abs(pnl * perUsd)), Math.abs(pnl) < 1 ? "" : pnl > 0 ? "good" : "bad",
-      p.inv ? `${pnl >= 0 ? "+" : "−"}${(Math.abs(pnl) * 100 / p.inv).toFixed(1).replace(".", ",")}% с момента учёта` : null);
-    card.append(facts);
+  if (isGifts) {
+    const gs = C.hold.filter(h => h[4] === p.i && h[0].startsWith("GIFT:")).map(h => (C.gifts || {})[h[0].slice(5)] || []);
+    const mine = gs.filter(g => g[9]), ask = gs.filter(g => g[8]);
+    if (mine.length || ask.length) {
+      const facts = el("div", "acc-facts");
+      const f = (k, v, note) => { const d = el("div"); d.append(el("div", "k", k), el("div", "v num", v)); if (note) d.append(el("div", "k", note)); facts.append(d); };
+      f("Моя оценка", tonFmt(gs.reduce((x, g) => x + (g[9] || g[6] || 0), 0)), mine.length < gs.length ? "остальные по рынку" : "всех подарков");
+      if (ask.length) f("Хочу продать", tonFmt(ask.reduce((x, g) => x + g[8], 0)), `${ask.length} из ${gs.length} подарков`);
+      card.append(facts);
+    }
   } else if (a && kind !== "asset" && a[3]) {
     const pnl = p.value - p.inv, cur = a[4], nat = a.length > 8 && a[8] != null;
     const facts = el("div", "acc-facts");
