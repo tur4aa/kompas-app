@@ -1803,7 +1803,7 @@ function accCard(C, p, sum) {
     const pnlNat = nat ? a[5] - a[8] : null;
     f(kind === "deposit" ? "Проценты" : "Результат", (pnl >= 0 ? "+" : "−") + (nat ? fmtNative(Math.abs(pnlNat), cur) : fmt(Math.abs(pnl)) + " " + state.cur)
 , Math.abs(pnl) < 1 ? "" : pnl > 0 ? "good" : "bad",
-      p.inv ? `${pnl >= 0 ? "+" : "−"}${(Math.abs(pnl) * 100 / p.inv).toFixed(1).replace(".", ",")}% к вложенному` : null);
+      p.inv > 0 && Math.abs(pnl) < p.inv * 10 ? `${pnl >= 0 ? "+" : "−"}${(Math.abs(pnl) * 100 / p.inv).toFixed(1).replace(".", ",")}% к вложенному` : null);
     card.append(facts);
   }
   const hs = a ? C.hold.filter(h => h[4] === p.i) : [];
